@@ -50,47 +50,54 @@ int main() {
 	int i=0;
 	FILE* bmp = NULL;
 	char file[20]={0};
-	uint8_t info[54];
-	uint8_t* r = NULL;
-	uint8_t data[600][500] = {0};
+	uint8_t* pixels = NULL;
 	int buffer[500][400] = {0};
-	int width = 0, height = 0;
+	int width, height, bytesPerPixel;
 	clock_t a = clock();
 	while(1) {
 		sprintf(file, "frames/%04d.bmp", ++i);
-		bmp = fopen(file, "r");
+		bmp = fopen(file, "rb");
 		if(bmp == NULL) {
 			break;
 		}
-		fread(info, sizeof(uint8_t), 54, bmp);
-		width = *(int*)&info[18];
-		height = *(int*)&info[22];
-		int hratio = width / col;
-		int vratio = height / row;
-		int row_padding = (width*3+3) & (~3);
-		r = malloc(sizeof(uint8_t)*row_padding);
+		int dataOffset;
+		fseek(bmp, 0x0A, SEEK_SET);
+		fread(&dataOffset, sizeof(int), 1, bmp);
+		fseek(bmp, 0x12, SEEK_SET);
+		fread(&width, sizeof(int), 1, bmp);
+		fseek(bmp, 0x16, SEEK_SET);
+		fread(&height, sizeof(int), 1, bmp);
+		int16_t bitsPerPixel;
+		fseek(bmp, 0x1C, SEEK_SET);
+		fread(&bitsPerPixel, sizeof(int16_t), 1, bmp);
+		bytesPerPixel = ((int)bitsPerPixel) / 8;
+        int paddedRowSize = width*bytesPerPixel;
+        int unpaddedRowSize = width*bytesPerPixel;
+		pixels = malloc(unpaddedRowSize * height);
+		uint8_t* currentRowPtr = pixels + ((height-1)*unpaddedRowSize);
 		for(int j=0; j<height; j++) {
-			fread(r, sizeof(uint8_t), row_padding, bmp);
-			for(int k=0; k<width; k++) {
-				data[j][k] = r[k*3];
-			}
+			fseek(bmp, dataOffset+(j*paddedRowSize), SEEK_SET);
+			fread(currentRowPtr, sizeof(uint8_t), unpaddedRowSize, bmp);
+			currentRowPtr -= unpaddedRowSize;
 		}
-		free(r);
 		fclose(bmp);
+		double hratio = width * 1.0 / col;
+		double vratio = height * 1.0 / row;
 		for(int j=0; j<row; j++) {
 			for(int k=0; k<col; k++) {
-				buffer[row-j-1][k] = 0;
+				buffer[j][k] = 0;
 				int cnt=0;
-				for(int jj=j*vratio; jj<(j+1)*vratio; jj++) {
-					for(int kk=k*hratio; kk<(k+1)*hratio; kk++) {
-						buffer[row-j-1][k] += data[jj][kk];
+				for(int jj=j*vratio; jj<(int)((j+1)*vratio); jj++) {
+					for(int kk=k*hratio; kk<(int)((k+1)*hratio); kk++) {
+						buffer[j][k] += pixels[3*(jj*width+kk)];
 						cnt++;
 					}
 				}
-				buffer[row-j-1][k] /= cnt;
+				buffer[j][k] /= cnt;
 			}
 		}
-		usleep(1000000/15/2 - clock() + a);
+		free(pixels);
+		usleep(1000000/15 - clock() + a);
 		a = clock();
 		for(int j=0; j<row; j++) {
 			for(int k=0; k<col; k++) {
