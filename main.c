@@ -45,7 +45,8 @@ int main() {
 	signal(SIGINT, SIGINT_handler);
 	signal(SIGWINCH, SIGWINCH_handler);
 	system("mkdir frames");
-	system("ffmpeg -i badapple.avi -vf fps=15 frames/%04d.bmp");
+	system("ffmpeg -hide_banner -i badapple.avi -vf fps=15 frames/%04d.bmp");
+	printf("\033[H");
 	resize();
 	int i=0;
 	FILE* bmp = NULL;
