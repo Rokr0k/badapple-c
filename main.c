@@ -6,8 +6,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/ioctl.h>
-
-const char colors[] = " .:-=+*%#@";
+const char colors[] = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 
 int row, col;
 
@@ -20,7 +19,7 @@ int min(int a, int b) {
 
 void finish() {
 	printf("\033[2J\033[H");
-	system("rm -rf frames");
+	system("rm -rf temp");
 	exit(0);
 }
 
@@ -41,22 +40,29 @@ void SIGWINCH_handler(int sig) {
 	resize();
 }
 
-int main() {
+int main(int argc, char** argv) {
+	char* video = "video.mp4";
+	if(argc > 1) {
+		video = argv[1];
+	}
 	signal(SIGINT, SIGINT_handler);
 	signal(SIGWINCH, SIGWINCH_handler);
-	system("mkdir frames");
-	system("ffmpeg -hide_banner -i badapple.avi -vf fps=15 frames/%04d.bmp");
-	printf("\033[H");
+	system("mkdir temp");
+	char* parser = malloc(sizeof(char) * (64 + strlen(video)));
+	sprintf(parser, "ffmpeg -hide_banner -i \"%s\" -s 720x480 -vf fps=15 temp/%%04d.bmp", video);
+	system(parser);
+	free(parser);
+	printf("\033[2J\033[H");
 	resize();
 	int i=0;
 	FILE* bmp = NULL;
 	char file[20]={0};
 	uint8_t* pixels = NULL;
-	int buffer[500][400] = {0};
+	int buffer[1000][500] = {0};
 	int width, height, bytesPerPixel;
 	clock_t a = clock();
 	while(1) {
-		sprintf(file, "frames/%04d.bmp", ++i);
+		sprintf(file, "temp/%04d.bmp", ++i);
 		bmp = fopen(file, "rb");
 		if(bmp == NULL) {
 			break;
@@ -90,7 +96,7 @@ int main() {
 				int cnt=0;
 				for(int jj=j*vratio; jj<(int)((j+1)*vratio); jj++) {
 					for(int kk=k*hratio; kk<(int)((k+1)*hratio); kk++) {
-						buffer[j][k] += pixels[3*(jj*width+kk)];
+						buffer[j][k] += pixels[3*(jj*width+kk)] + pixels[3*(jj*width+kk) + 1] + pixels[3*(jj*width+kk) + 2];
 						cnt++;
 					}
 				}
@@ -102,7 +108,7 @@ int main() {
 		a = clock();
 		for(int j=0; j<row; j++) {
 			for(int k=0; k<col; k++) {
-				printf("%c", colors[buffer[j][k]*strlen(colors)/256]);
+				printf("%c", colors[buffer[j][k]*strlen(colors)/766]);
 			}
 			printf("\n");
 		}
