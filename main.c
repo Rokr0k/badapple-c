@@ -27,7 +27,7 @@ void finish() {
 void resize() {
 	struct winsize ws;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
-	col = ws.ws_col - 1;
+	col = ws.ws_col;
 	row = ws.ws_row - 1;
 }
 
