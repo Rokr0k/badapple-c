@@ -18,7 +18,7 @@ int min(int a, int b) {
 }
 
 void finish() {
-	printf("\033[2J\033[H");
+	printf("\033[1049l\033[H");
 	system("rm -rf temp");
 	exit(0);
 }
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
 	sprintf(parser, "ffmpeg -hide_banner -i \"%s\" -s 720x480 -vf fps=15 temp/%%04d.bmp", video);
 	system(parser);
 	free(parser);
-	printf("\033[2J\033[H");
+	printf("\033[1049h\033[H");
 	resize();
 	int i=0;
 	FILE* bmp = NULL;
