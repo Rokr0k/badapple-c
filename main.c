@@ -57,32 +57,32 @@ int main(int argc, char** argv) {
 	signal(SIGINT, exit_handler);
 	signal(SIGQUIT, exit_handler);
 	signal(SIGWINCH, SIGWINCH_handler);
-	char* command = malloc(sizeof(char)*(120 + strlen(argv[1])));
-	sprintf(command, "ffmpeg -hide_banner -loglevel warning -nostat -i \"%s\" -s %dx%d -r %d -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", argv[1], WIDTH, HEIGHT, RATE);
+	char* command = calloc(112 + strlen(argv[1]), sizeof(char));
+	sprintf(command, "ffmpeg -hide_banner -loglevel warning -i \"%s\" -s %dx%d -r %d -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", argv[1], WIDTH, HEIGHT, RATE);
 	v_pipe = popen(command, "r");
 	free(command);
-	fprintf(stdout, "\033[?1049h\033[?25l");
 	resize();
+	fprintf(stdout, "\033[?1049h\033[?25l");
 	int i=0;
 	int count;
 	uint8_t frame[HEIGHT][WIDTH][3];
-	int buffer[1000][500][3] = {0};
+	int buffer[200][500][3] = {0};
 	clock_t a = clock();
 	while(1) {
-		count = fread(frame, 1, HEIGHT*WIDTH*3, v_pipe);
+		count = fread(frame, 1, HEIGHT * WIDTH * 3, v_pipe);
 		if(count != HEIGHT*WIDTH*3) {
 			break;
 		}
 		double hratio = WIDTH * 1.0 / col;
 		double vratio = HEIGHT * 1.0 / row;
-		for(int j=0; j<row; j++) {
-			for(int k=0; k<col; k++) {
+		for(int j = 0; j < row; j++) {
+			for(int k = 0; k < col; k++) {
 				buffer[j][k][0] = 0;
 				buffer[j][k][1] = 0;
 				buffer[j][k][2] = 0;
 				int cnt=0;
-				for(int jj=j*vratio; jj<(int)((j+1)*vratio); jj++) {
-					for(int kk=k*hratio; kk<(int)((k+1)*hratio); kk++) {
+				for(int jj = j * vratio; jj < (int)((j + 1) * vratio); jj++) {
+					for(int kk = k * hratio; kk < (int)((k + 1) * hratio); kk++) {
 						buffer[j][k][0] += frame[jj][kk][0];
 						buffer[j][k][1] += frame[jj][kk][1];
 						buffer[j][k][2] += frame[jj][kk][2];
@@ -94,10 +94,10 @@ int main(int argc, char** argv) {
 				buffer[j][k][2] /= cnt;
 			}
 		}
-		usleep(1000000/RATE - clock() + a);
+		usleep(1000000 / RATE - (clock() - a) * 1000000 / CLOCKS_PER_SEC);
 		a = clock();
-		for(int j=0; j<row; j++) {
-			for(int k=0; k<col; k++) {
+		for(int j = 0; j < row; j++) {
+			for(int k = 0; k < col; k++) {
 				fprintf(stdout, "\033[48;2;%d;%d;%dm ", buffer[j][k][0], buffer[j][k][1], buffer[j][k][2]);
 			}
 		}
