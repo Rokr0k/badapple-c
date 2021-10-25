@@ -9,5 +9,8 @@ clean:
 	$(RM) *.o
 	$(RM) badapple
 
-badapple: main.c
-	$(CC) $^ -o $@
+badapple: main.o
+	$(CC) $^ -o $@ -lc
+
+main.o: main.c
+	$(CC) -c $^ -o $@
