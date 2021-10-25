@@ -2,7 +2,7 @@ CC = gcc
 
 all: badapple
 
-run: badapple
+run: badapple video.mp4
 	./$^
 
 clean:

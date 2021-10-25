@@ -21,9 +21,10 @@ int min(int a, int b) {
 }
 
 void finish() {
-	printf("\033[?1049l\033[?25h");
+	fprintf(stdout, "\033[?1049l\033[?25h");
 	fflush(v_pipe);
-	fclose(v_pipe);
+	pclose(v_pipe);
+	exit(0);
 }
 
 void resize() {
@@ -35,7 +36,7 @@ void resize() {
 
 void exit_handler(int sig) {
 	(void)sig;
-	exit(0);
+	finish();
 }
 
 void SIGWINCH_handler(int sig) {
@@ -45,20 +46,27 @@ void SIGWINCH_handler(int sig) {
 
 #define WIDTH 512
 #define HEIGHT 384
+#define RATE 30
 
 int main(int argc, char** argv) {
-	atexit(finish);
+	if(argc <= 1) {
+		fprintf(stderr, "no file input\n");
+		exit(1);
+	}
 	signal(SIGTERM, exit_handler);
 	signal(SIGINT, exit_handler);
 	signal(SIGQUIT, exit_handler);
 	signal(SIGWINCH, SIGWINCH_handler);
-	FILE* v_pipe = popen("ffmpeg -hide_banner -loglevel error -i video.mp4 -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", "r");
-	printf("\033[?1049h\033[?25l");
+	char* command = malloc(sizeof(char)*(120 + strlen(argv[1])));
+	sprintf(command, "ffmpeg -hide_banner -loglevel warning -nostat -i \"%s\" -s %dx%d -r %d -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", argv[1], WIDTH, HEIGHT, RATE);
+	v_pipe = popen(command, "r");
+	free(command);
+	fprintf(stdout, "\033[?1049h\033[?25l");
 	resize();
 	int i=0;
 	int count;
 	uint8_t frame[HEIGHT][WIDTH][3];
-	int buffer[1000][500] = {0};
+	int buffer[1000][500][3] = {0};
 	clock_t a = clock();
 	while(1) {
 		count = fread(frame, 1, HEIGHT*WIDTH*3, v_pipe);
@@ -69,27 +77,33 @@ int main(int argc, char** argv) {
 		double vratio = HEIGHT * 1.0 / row;
 		for(int j=0; j<row; j++) {
 			for(int k=0; k<col; k++) {
-				buffer[j][k] = 0;
+				buffer[j][k][0] = 0;
+				buffer[j][k][1] = 0;
+				buffer[j][k][2] = 0;
 				int cnt=0;
 				for(int jj=j*vratio; jj<(int)((j+1)*vratio); jj++) {
 					for(int kk=k*hratio; kk<(int)((k+1)*hratio); kk++) {
-						buffer[j][k] += frame[jj][kk][0]+frame[jj][kk][1]+frame[jj][kk][2];
+						buffer[j][k][0] += frame[jj][kk][0];
+						buffer[j][k][1] += frame[jj][kk][1];
+						buffer[j][k][2] += frame[jj][kk][2];
 						cnt++;
 					}
 				}
-				buffer[j][k] /= cnt;
+				buffer[j][k][0] /= cnt;
+				buffer[j][k][1] /= cnt;
+				buffer[j][k][2] /= cnt;
 			}
 		}
-		usleep(1000000/30 - clock() + a);
+		usleep(1000000/RATE - clock() + a);
 		a = clock();
 		for(int j=0; j<row; j++) {
 			for(int k=0; k<col; k++) {
-				printf("%c", colors[buffer[j][k]*strlen(colors)/766]);
+				fprintf(stdout, "\033[48;2;%d;%d;%dm ", buffer[j][k][0], buffer[j][k][1], buffer[j][k][2]);
 			}
 		}
-		printf("\033[H");
+		fprintf(stdout, "\033[H");
 		fflush(stdout);
 	}
-	exit(0);
+	finish();
 	return 0;
 }
