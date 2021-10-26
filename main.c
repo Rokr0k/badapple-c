@@ -17,7 +17,7 @@ FILE* v_pipe;
 #define HEIGHT 384
 #define RATE 30
 
-int tty;
+int tty = -1;
 
 int min(int a, int b) {
 	if(a>b)
@@ -27,17 +27,7 @@ int min(int a, int b) {
 }
 
 void finish() {
-	switch(tty) {
-	case 1:
-		fprintf(stdout, "\033[?1049l\033[?25h\033[0m");
-		break;
-	case 2:
-		fprintf(stdout, "\033[H\033[?25h\033[0m\033[2J");
-		break;
-	default:
-		fprintf(stdout, "\033[?1049l\033[?25h");
-		break;
-	}
+	fprintf(stdout, "\033[H\033[2J\033[?1049l\033[?25h\033[0m");
 	fflush(v_pipe);
 	pclose(v_pipe);
 	exit(0);
@@ -77,7 +67,7 @@ struct {
 };
 
 int main(int argc, char** argv) {
-	if(argc <= 1) {
+	if(argc < 2) {
 		fprintf(stderr, "no file input\n");
 		exit(1);
 	}
@@ -85,13 +75,32 @@ int main(int argc, char** argv) {
 	signal(SIGINT, exit_handler);
 	signal(SIGQUIT, exit_handler);
 	signal(SIGWINCH, SIGWINCH_handler);
-	tty = 0;
-	char* term = getenv("TERM");
-	if(term) {
-		if(strstr(term, "xterm")) {
-			tty = 1;
-		} else if(strstr(term, "linux")) {
-			tty = 2;
+	if(tty < 0) {
+		char* term = getenv("TERM");
+		if(term) {
+			if(strstr(term, "xterm")) {
+				tty = 1;
+			} else if(strstr(term, "linux")) {
+				tty = 2;
+			} else if(strstr(term, "vtnt")) {
+				tty = 2;
+			} else if(strstr(term, "cygwin")) {
+				tty = 2;
+			} else if(strstr(term, "vt220")) {
+				tty = 0;
+			} else if(strstr(term, "fallback")) {
+				tty = 2;
+			} else if(strstr(term, "rxvt-256color")) {
+				tty = 1;
+			} else if(strstr(term, "rxvt")) {
+				tty = 2;
+			} else if(strstr(term, "vt100") && col == 40) {
+				tty = 0;
+			} else if(!strncmp(term, "st", 2)) {
+				tty = 1;
+			} else {
+				tty = 2;
+			}
 		}
 	}
 	char* command = calloc(112 + strlen(argv[1]), sizeof(char));
@@ -99,17 +108,7 @@ int main(int argc, char** argv) {
 	v_pipe = popen(command, "r");
 	free(command);
 	resize();
-	switch(tty) {
-	case 1:
-		fprintf(stdout, "\033[?1049h\033[?25l");
-		break;
-	case 2:
-		fprintf(stdout, "\033[?25l");
-		break;
-	default:
-		fprintf(stdout, "\033[?1049h\033[?25l");
-		break;
-	}
+	fprintf(stdout, "\033[?1049h\033[?25l");
 	int count;
 	uint8_t frame[HEIGHT][WIDTH][3];
 	int buffer[200][500][3];
