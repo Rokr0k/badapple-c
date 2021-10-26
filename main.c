@@ -13,6 +13,12 @@ int row, col;
 
 FILE* v_pipe;
 
+#define WIDTH 512
+#define HEIGHT 384
+#define RATE 30
+
+int tty;
+
 int min(int a, int b) {
 	if(a>b)
 		return b;
@@ -21,7 +27,17 @@ int min(int a, int b) {
 }
 
 void finish() {
-	fprintf(stdout, "\033[?1049l\033[?25h");
+	switch(tty) {
+	case 1:
+		fprintf(stdout, "\033[?1049l\033[?25h\033[0m");
+		break;
+	case 2:
+		fprintf(stdout, "\033[H\033[?25h\033[0m\033[2J");
+		break;
+	default:
+		fprintf(stdout, "\033[?1049l\033[?25h");
+		break;
+	}
 	fflush(v_pipe);
 	pclose(v_pipe);
 	exit(0);
@@ -44,9 +60,21 @@ void SIGWINCH_handler(int sig) {
 	resize();
 }
 
-#define WIDTH 512
-#define HEIGHT 384
-#define RATE 30
+struct {
+	int r;
+	int g;
+	int b;
+	int n;
+} color_schemes[] = {
+	{0, 0, 0, 40},
+	{170, 0, 0, 41},
+	{0, 170, 0, 42},
+	{170, 85, 0, 43},
+	{0, 0, 170, 44},
+	{170, 0, 170, 45},
+	{0, 170, 170, 46},
+	{170, 170, 170, 47}
+};
 
 int main(int argc, char** argv) {
 	if(argc <= 1) {
@@ -57,16 +85,34 @@ int main(int argc, char** argv) {
 	signal(SIGINT, exit_handler);
 	signal(SIGQUIT, exit_handler);
 	signal(SIGWINCH, SIGWINCH_handler);
+	tty = 0;
+	char* term = getenv("TERM");
+	if(term) {
+		if(strstr(term, "xterm")) {
+			tty = 1;
+		} else if(strstr(term, "linux")) {
+			tty = 2;
+		}
+	}
 	char* command = calloc(112 + strlen(argv[1]), sizeof(char));
 	sprintf(command, "ffmpeg -hide_banner -loglevel warning -i \"%s\" -s %dx%d -r %d -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", argv[1], WIDTH, HEIGHT, RATE);
 	v_pipe = popen(command, "r");
 	free(command);
 	resize();
-	fprintf(stdout, "\033[?1049h\033[?25l");
-	int i=0;
+	switch(tty) {
+	case 1:
+		fprintf(stdout, "\033[?1049h\033[?25l");
+		break;
+	case 2:
+		fprintf(stdout, "\033[?25l");
+		break;
+	default:
+		fprintf(stdout, "\033[?1049h\033[?25l");
+		break;
+	}
 	int count;
 	uint8_t frame[HEIGHT][WIDTH][3];
-	int buffer[200][500][3] = {0};
+	int buffer[200][500][3];
 	clock_t a = clock();
 	while(1) {
 		count = fread(frame, 1, HEIGHT * WIDTH * 3, v_pipe);
@@ -75,30 +121,88 @@ int main(int argc, char** argv) {
 		}
 		double hratio = WIDTH * 1.0 / col;
 		double vratio = HEIGHT * 1.0 / row;
-		for(int j = 0; j < row; j++) {
-			for(int k = 0; k < col; k++) {
-				buffer[j][k][0] = 0;
-				buffer[j][k][1] = 0;
-				buffer[j][k][2] = 0;
-				int cnt=0;
-				for(int jj = j * vratio; jj < (int)((j + 1) * vratio); jj++) {
-					for(int kk = k * hratio; kk < (int)((k + 1) * hratio); kk++) {
-						buffer[j][k][0] += frame[jj][kk][0];
-						buffer[j][k][1] += frame[jj][kk][1];
-						buffer[j][k][2] += frame[jj][kk][2];
-						cnt++;
+		for(int i = 0; i < row; i++) {
+			for(int j = 0; j < col; j++) {
+				switch(tty) {
+				case 1:
+					{
+					buffer[i][j][0] = 0;
+					buffer[i][j][1] = 0;
+					buffer[i][j][2] = 0;
+					int cnt=0;
+					for(int ii = i * vratio; ii < (int)((i + 1) * vratio); ii++) {
+						for(int jj = j * hratio; jj < (int)((j + 1) * hratio); jj++) {
+							buffer[i][j][0] += frame[ii][jj][0];
+							buffer[i][j][1] += frame[ii][jj][1];
+							buffer[i][j][2] += frame[ii][jj][2];
+							cnt++;
+						}
+					}
+					buffer[i][j][0] /= cnt;
+					buffer[i][j][1] /= cnt;
+					buffer[i][j][2] /= cnt;
+					}
+					break;
+				case 2:
+					{
+					int r=0, g=0, b=0;
+					int cnt=0;
+					for(int ii = i * vratio; ii < (int)((i + 1) * vratio); ii++) {
+						for(int jj = j * hratio; jj < (int)((j + 1) * hratio); jj++) {
+							r += frame[ii][jj][0];
+							g += frame[ii][jj][1];
+							b += frame[ii][jj][2];
+							cnt++;
+						}
+					}
+					r /= cnt;
+					g /= cnt;
+					b /= cnt;
+					unsigned int d = 4294967295;
+					buffer[i][j][0] = 0;
+					for(int k=0; k<8; k++) {
+						int dr = color_schemes[k].r - r;
+						int dg = color_schemes[k].g - g;
+						int db = color_schemes[k].b - b;
+						unsigned int _d = dr*dr+dg*dg+db*db;
+						if(_d < d) {
+							d = _d;
+							buffer[i][j][0] = color_schemes[k].n;
+						}
+					}
+					}
+					break;
+				default:
+					{
+					buffer[i][j][0] = 0;
+					buffer[i][j][1] = 0;
+					buffer[i][j][2] = 0;
+					int cnt=0;
+					for(int ii = i * vratio; ii < (int)((i + 1) * vratio); ii++) {
+						for(int jj = j * hratio; jj < (int)((j + 1) * hratio); jj++) {
+							buffer[i][j][0] += frame[ii][jj][0] + frame[ii][jj][1] + frame[ii][jj][2];
+							cnt++;
+						}
+					}
+					buffer[i][j][0] /= cnt;
 					}
 				}
-				buffer[j][k][0] /= cnt;
-				buffer[j][k][1] /= cnt;
-				buffer[j][k][2] /= cnt;
 			}
 		}
 		usleep(1000000 / RATE - (clock() - a) * 1000000 / CLOCKS_PER_SEC);
 		a = clock();
-		for(int j = 0; j < row; j++) {
-			for(int k = 0; k < col; k++) {
-				fprintf(stdout, "\033[48;2;%d;%d;%dm ", buffer[j][k][0], buffer[j][k][1], buffer[j][k][2]);
+		for(int i = 0; i < row; i++) {
+			for(int j = 0; j < col; j++) {
+				switch(tty) {
+				case 1:
+					fprintf(stdout, "\033[48;2;%d;%d;%dm ", buffer[i][j][0], buffer[i][j][1], buffer[i][j][2]);
+					break;
+				case 2:
+					fprintf(stdout, "\033[%dm ", buffer[i][j][0]);
+					break;
+				default:
+					fprintf(stdout, "%c", colors[buffer[i][j][0]*strlen(colors)/766]);
+				}
 			}
 		}
 		fprintf(stdout, "\033[H");
